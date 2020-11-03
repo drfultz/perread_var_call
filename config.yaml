@@ -1,0 +1,7 @@
+FEATURES:
+    - A # DRF_full3ETS_VARs3
+    - B # IGS_DRF_consensuses12
+    - C # DRF_5ETS_VARs
+    - D # 18S1stdel_longjunc
+Splitting_Seq: refs/25S_rDNA_Col-0_consensus.fa
+MIN_ALIGN_LENGTH: 1000

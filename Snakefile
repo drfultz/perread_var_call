@@ -1,0 +1,101 @@
+configfile: "config.yaml"
+
+###minimap2 and paf-mappings_to-split-fq_sm.py can take .fa or .fq inputs and produce outputs which function downstream and maintain q scores, if present, in split fastqs.
+###Using a duplicate for the mapping_for_split and splitter rules allows either .fa or .fq as inputs while still requiring a proper file extesion of either .fa or .fq
+
+#temp rule
+rule fa_to_fq:
+    input:
+        "input_sequence/{sample}.fa"
+    output:
+        "input_sequence/{sample}.fq"
+    params:
+        ppn="1",
+        vmem="8gb",
+        walltime="1:00:00"
+    conda:
+        "envs/bbmap2.yaml"
+    shell:
+        "reformat.sh in={input[0]} out={output[0]}"
+
+rule mapping_for_splitting:
+    input:
+        config["Splitting_Seq"],
+        "input_sequence/{sample}.fq"
+    output:
+        "splitter_inputs/{sample}_to_splitref.paf",
+    params:
+        ppn="1",
+        vmem="8gb",
+        walltime="1:00:00"
+    conda:
+        "envs/minimap2.yaml"
+    shell:
+        "minimap2 -c -t {params.ppn} -x map-ont {input[0]} {input[1]} > {output[0]}"
+
+rule to_split_fq:
+    input:
+        "splitter_inputs/{sample}_to_splitref.paf",
+        "input_sequence/{sample}.fq"
+    output:
+        "split_sequence/{sample}_split.fq"
+    params:
+        min_len=config["MIN_ALIGN_LENGTH"],
+        ppn="1",
+        vmem="4gb",
+        walltime="1:00:00"
+    conda:
+        "envs/pysam.yaml"
+    script:
+        "scripts/paf-mappings_to-split-fq_sm.py"
+
+rule map_splitfq:
+    input:
+        "split_sequence/{sample}_split.fq",
+        "features/{feature}.fa"
+    output:
+        "split_mapping/{sample}_split_to_{feature}.cig_paf"
+    params:
+        ppn="1",
+        vmem="4gb",
+        walltime="1:00:00"
+    conda:
+        "envs/minimap2.yaml"
+    shell:
+        "minimap2 -c --paf-no-hit -t {params.ppn} -x map-ont {input[1]} {input[0]} > {output[0]} \n"
+
+rule call_splitfq:
+    input:
+        "split_mapping/{sample}_split_to_{feature}.cig_paf"
+    output:
+        "split_calls/{sample}_callsfor_{feature}.tsv"
+    params:
+        ppn="1",
+        vmem="2gb",
+        walltime="1:00:00"
+    script:
+        "scripts/multi_alignment_paf_caller_smVarCall.py"
+
+rule merge_calls:
+    input:
+        ["split_calls/{{sample}}_callsfor_{feat}.tsv".format(feat=f) for f in config["FEATURES"]]
+    output:
+        "merged_calls/{sample}_mergedcalls.tsv"
+    params:
+        ppn="1",
+        vmem="1gb",
+        walltime="1:00:00"
+    shell:
+        "paste {input} > {output}"
+
+rule format_calls:
+    input:
+        "merged_calls/{sample}_mergedcalls.tsv"
+    output:
+        "formatted_calls/{sample}.feat"
+    params:
+        ppn="1",
+        vmem="1gb",
+        walltime="1:00:00"
+    script:
+        "scripts/format_feature_calls_sm.py"
