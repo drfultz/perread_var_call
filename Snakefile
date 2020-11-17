@@ -18,12 +18,12 @@ rule fa_to_fq:
     shell:
         "reformat.sh in={input[0]} out={output[0]}"
 
-rule mapping_for_splitting:
+rule map_for_splitting:
     input:
         config["Splitting_Seq"],
         "input_sequence/{sample}.fq"
     output:
-        "splitter_inputs/{sample}_to_splitref.paf",
+        "map_to_split/{sample}_to_split-ref.paf"
     params:
         ppn="1",
         vmem="8gb",
@@ -35,9 +35,10 @@ rule mapping_for_splitting:
 
 rule to_split_fq:
     input:
-        "splitter_inputs/{sample}_to_splitref.paf",
+        "map_to_split/{sample}_to_split-ref.paf",
         "input_sequence/{sample}.fq"
     output:
+        "oriented_sequence/{sample}_oriented.fq",
         "split_sequence/{sample}_split.fq"
     params:
         min_len=config["MIN_ALIGN_LENGTH"],
@@ -74,7 +75,7 @@ rule call_splitfq:
         vmem="2gb",
         walltime="1:00:00"
     script:
-        "scripts/multi_alignment_paf_caller_smVarCall.py"
+        "scripts/multi_alignment_paf_caller_sm.py"
 
 rule merge_calls:
     input:

@@ -21,12 +21,19 @@ import csv
 ### Intended to split long multi-repeat ONT reads into single rDNA units by first aligning them to a 25S reference
 
 
+# paf_file = sys.argv[1]
+# input_fq = sys.argv[2]
+# min_align_length = 1000 #alignment length may need to be altered for each reference
+# output_oriented_file = input_fq.split('.')[0] + "_orient.fq"
+# output_tagged_file = input_fq.split('.')[0] + "_split.fq"
+
 paf_file = snakemake.input[0]
 input_fq = snakemake.input[1]
 min_align_length = snakemake.params.min_len
-output_fq = snakemake.output[0]
+output_oriented_file = snakemake.output[0]
+output_tagged_file = snakemake.output[1]
 
-#print(paf_file + readsbam + output_fq)
+#print(paf_file + input_fq + output_tagged_file)
 
 with open(paf_file,'r') as paf:
 	paf_reader = csv.reader(paf, delimiter='\t', quoting=csv.QUOTE_NONE)
@@ -34,7 +41,7 @@ with open(paf_file,'r') as paf:
 	for align in paf_reader:
 		aligned_names.add(align[0])
 
-with open(output_fq, "w") as outf:
+with open(output_oriented_file, "w") as output_oriented, open(output_tagged_file, "w") as output_tagged:
 	for aligned_name in aligned_names:
 		print(aligned_name)
 		pre_positions = [0]
@@ -62,7 +69,7 @@ with open(output_fq, "w") as outf:
 			#print("\t" + read.name)
 			count = 0
 			#read_name = read.name
-			if aligned_name == read.name.rsplit()[0]:
+			if aligned_name == read.name.split()[0]:
 				read_length = len(read.sequence)
 				positions.append(read_length)
 				positions.sort()
@@ -74,7 +81,7 @@ with open(output_fq, "w") as outf:
 				oriented_qualities = ""
 				oriented_positions = []
 
-				if num_R_mappings > num_F_mappings:
+				if num_R_mappings > num_F_mappings: #if mostly R direction, reverse complement
 					orientation = "RC"
 					oriented_sequence = read.sequence.translate(str.maketrans('ACGTacgtRYMKrymkVBHDvbhd', 'TGCAtgcaYRKMyrkmBVDHbvdh'))[::-1]
 					if read.quality is not None:
@@ -89,17 +96,24 @@ with open(output_fq, "w") as outf:
 				print(orientation)
 				print(oriented_positions)
 
+				x = pysam.FastxRecord()
+				x.name = aligned_name
+				x.sequence = oriented_sequence
+				x.quality = oriented_qualities
+				# print(x)
+				output_oriented.write(str(x) + "\n")
+
 				for begin,end in zip(oriented_positions[:-1],oriented_positions[1:]):
 					count += 1
 					print(begin, "\t: ", end, "\tlength", len(oriented_sequence[begin:end]))
 
 					a = pysam.FastxRecord()
-					a.name = "%s:%s" % (aligned_name, str(count).zfill(2))
+					a.name = "%s:%s:%s" % (aligned_name,str(count).zfill(2),begin)
 					a.sequence = oriented_sequence[begin:end]
 					a.quality = oriented_qualities[begin:end]
 					#print(a)
-					outf.write(str(a) + "\n")
+					output_tagged.write(str(a) + "\n")
 				print()
 				break #assumes no duplicate readnames. Readname occurences after first will be skipped.
 		else: # no break
-			print("!!!!!!!!!!!!!!!!!!!!\nno match for {} found\n\n".format(aligned_name))
+			print(f"!!!!!!!!!!!!!!!!!!!!\nno match for {aligned_name} found\n\n")
