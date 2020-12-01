@@ -35,85 +35,93 @@ output_tagged_file = snakemake.output[1]
 
 #print(paf_file + input_fq + output_tagged_file)
 
-with open(paf_file,'r') as paf:
+with open(paf_file,"r") as paf, open(output_oriented_file, "w") as output_oriented, open(output_tagged_file, "w") as output_tagged:
 	paf_reader = csv.reader(paf, delimiter='\t', quoting=csv.QUOTE_NONE)
-	aligned_names = set()
-	for align in paf_reader:
-		aligned_names.add(align[0])
+	#####Initialize the record values
+	current_readname = "ignore_this_message"
+	pre_positions = [0]
+	num_F_mappings = 0
+	num_R_mappings = 0
 
-with open(output_oriented_file, "w") as output_oriented, open(output_tagged_file, "w") as output_tagged:
-	for aligned_name in aligned_names:
-		print(aligned_name)
-		pre_positions = [0]
-		num_F_mappings = 0
-		num_R_mappings = 0
+	for aln in paf_reader:
+		if aln[0] != current_readname:
+			#####Look for a match in the fastq to write as outputs of the old record
+			for read in pysam.FastxFile(input_fq):
+				#print("\t" + read.name)
+				count = 0
+				if current_readname == read.name.split()[0]:
+					###Add final position (read length) to positions
+					print(current_readname)
+					read_length = len(read.sequence)
+					pre_positions.append(read_length)
+					positions = list(set(pre_positions)) #reduce positions to unique elements
+					positions.sort()
+					print(positions)
 
-		with open(paf_file,'r') as loop_paf:
-			loop_paf_reader = csv.reader(loop_paf, delimiter='\t', quoting=csv.QUOTE_NONE)
-			for aln in loop_paf_reader:
-				if aligned_name == aln[0] and (int(aln[8]) - int(aln[7])) > min_align_length:
-					if aln[4] == "-":
-						num_R_mappings += 1
-						pre_positions.append(int(aln[3]))
-					elif aln[4] == "+":
-						num_F_mappings += 1
-						pre_positions.append(int(aln[2]))
+					###Initial values
+					orientation = ""
+					oriented_sequence = ""
+					oriented_qualities = ""
+					oriented_positions = []
+
+					###Reverse complement sequence and qualitites if needed
+					if num_R_mappings > num_F_mappings: #if mostly R direction, reverse complement
+						orientation = "RC"
+						oriented_sequence = read.sequence.translate(str.maketrans('ACGTacgtRYMKrymkVBHDvbhd', 'TGCAtgcaYRKMyrkmBVDHbvdh'))[::-1]
+						if read.quality is not None:
+							oriented_qualities = read.quality[::-1]
+						oriented_positions = [read_length - x for x in positions][::-1]
 					else:
-						print("ERROR in paf")
-						#this should probably exit at this point or have better handling
+						orientation = "unaltered"
+						oriented_sequence = read.sequence
+						if read.quality is not None:
+							oriented_qualities = read.quality #"".join([chr(x + 33) for x in read.quality])
+						oriented_positions = positions
+					print(orientation)
+					#print(oriented_positions)
 
-		positions = list(set(pre_positions))
-		#print(positions)
+					###Write the whole original read in it's oriented state
+					x = pysam.FastxRecord()
+					x.name = current_readname
+					x.sequence = oriented_sequence
+					x.quality = oriented_qualities
+					# print(x)
+					output_oriented.write(str(x) + "\n")
 
-		for read in pysam.FastxFile(input_fq):
-			#print("\t" + read.name)
-			count = 0
-			#read_name = read.name
-			if aligned_name == read.name.split()[0]:
-				read_length = len(read.sequence)
-				positions.append(read_length)
-				positions.sort()
-				print(positions)
-				#print(read.quality)
+					###Write the split reads in the oriented direction
+					for begin,end in zip(oriented_positions[:-1],oriented_positions[1:]):
+						count += 1
+						print(begin, "\t: ", end, "\tlength", len(oriented_sequence[begin:end]))
 
-				orientation = ""
-				oriented_sequence = ""
-				oriented_qualities = ""
-				oriented_positions = []
+						a = pysam.FastxRecord()
+						a.name = "%s:%s:%s" % (current_readname,str(count).zfill(2),begin)
+						a.sequence = oriented_sequence[begin:end]
+						a.quality = oriented_qualities[begin:end]
+						#print(a)
+						output_tagged.write(str(a) + "\n")
+					print()
 
-				if num_R_mappings > num_F_mappings: #if mostly R direction, reverse complement
-					orientation = "RC"
-					oriented_sequence = read.sequence.translate(str.maketrans('ACGTacgtRYMKrymkVBHDvbhd', 'TGCAtgcaYRKMyrkmBVDHbvdh'))[::-1]
-					if read.quality is not None:
-						oriented_qualities = read.quality[::-1]
-					oriented_positions = [read_length - x for x in positions][::-1]
-				else:
-					orientation = "unaltered"
-					oriented_sequence = read.sequence
-					if read.quality is not None:
-						oriented_qualities = read.quality #"".join([chr(x + 33) for x in read.quality])
-					oriented_positions = positions
-				print(orientation)
-				print(oriented_positions)
+					###Readname occurences after first will be skipped.
+					break #assumes no duplicate readnames in fastx
 
-				x = pysam.FastxRecord()
-				x.name = aligned_name
-				x.sequence = oriented_sequence
-				x.quality = oriented_qualities
-				# print(x)
-				output_oriented.write(str(x) + "\n")
+			###If no matching readname found while searching fastx
+			else: # no break was found
+				print(f"!!!!!!!!!!!!!!!!!!!!\nno match for {current_readname} found\n\n")
 
-				for begin,end in zip(oriented_positions[:-1],oriented_positions[1:]):
-					count += 1
-					print(begin, "\t: ", end, "\tlength", len(oriented_sequence[begin:end]))
+			#####Reset the record
+			current_readname = aln[0]
+			pre_positions = [0]
+			num_F_mappings = 0
+			num_R_mappings = 0
 
-					a = pysam.FastxRecord()
-					a.name = "%s:%s:%s" % (aligned_name,str(count).zfill(2),begin)
-					a.sequence = oriented_sequence[begin:end]
-					a.quality = oriented_qualities[begin:end]
-					#print(a)
-					output_tagged.write(str(a) + "\n")
-				print()
-				break #assumes no duplicate readnames. Readname occurences after first will be skipped.
-		else: # no break
-			print(f"!!!!!!!!!!!!!!!!!!!!\nno match for {aligned_name} found\n\n")
+
+		if (int(aln[8]) - int(aln[7])) > min_align_length:
+			if aln[4] == "-":
+				num_R_mappings += 1
+				pre_positions.append(int(aln[3]))
+			elif aln[4] == "+":
+				num_F_mappings += 1
+				pre_positions.append(int(aln[2]))
+			else:
+				raise Exception(f"\n\tImproperly formatted paf.\n\tField 5 should only contain '+' or '-' , but '{aln[4]}' was found")
+				#this should probably exit at this point or have better handling
