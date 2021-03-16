@@ -1,4 +1,5 @@
 configfile: "config.yaml"
+localrules: fa_to_fq, map_for_splitting, map_splitfq, merge_calls, format_calls
 
 ###minimap2 and paf-mappings_to-split-fq_sm.py can take .fa or .fq inputs and produce outputs which function downstream and maintain q scores, if present, in split fastqs.
 ###Using a duplicate for the mapping_for_split and splitter rules allows either .fa or .fq as inputs while still requiring a proper file extesion of either .fa or .fq
@@ -27,7 +28,7 @@ rule map_for_splitting:
     params:
         ppn="1",
         vmem="8gb",
-        walltime="1:00:00"
+        walltime="3:00:00"
     conda:
         "envs/minimap2.yaml"
     shell:
@@ -43,8 +44,8 @@ rule to_split_fq:
     params:
         min_len=config["MIN_ALIGN_LENGTH"],
         ppn="1",
-        vmem="4gb",
-        walltime="1:00:00"
+        vmem="32gb",
+        walltime="8:00:00"
     conda:
         "envs/pysam.yaml"
     script:
@@ -58,7 +59,7 @@ rule map_splitfq:
         "split_mapping/{sample}_split_to_{feature}.cig_paf"
     params:
         ppn="1",
-        vmem="4gb",
+        vmem="8gb",
         walltime="1:00:00"
     conda:
         "envs/minimap2.yaml"
@@ -72,8 +73,8 @@ rule call_splitfq:
         "split_calls/{sample}_callsfor_{feature}.tsv"
     params:
         ppn="1",
-        vmem="2gb",
-        walltime="1:00:00"
+        vmem="8gb",
+        walltime="12:00:00"
     script:
         "scripts/multi_alignment_paf_caller_sm.py"
 
@@ -84,7 +85,7 @@ rule merge_calls:
         "merged_calls/{sample}_mergedcalls.tsv"
     params:
         ppn="1",
-        vmem="1gb",
+        vmem="8gb",
         walltime="1:00:00"
     shell:
         "paste {input} > {output}"
@@ -96,7 +97,7 @@ rule format_calls:
         "formatted_calls/{sample}.feat"
     params:
         ppn="1",
-        vmem="1gb",
+        vmem="8gb",
         walltime="1:00:00"
     script:
         "scripts/format_feature_calls_sm.py"
