@@ -22,48 +22,63 @@ paf_file = snakemake.input[0]
 feature = snakemake.wildcards.feature
 calls_output = snakemake.output[0]
 
-### uses a set to gather each unique readname
-with open(paf_file,'r') as paf:
 
-	readnames = set()
-	paf_reader = csv.reader(paf, delimiter='\t', quoting=csv.QUOTE_NONE)
-	for row in paf_reader:
-		readnames.add(row[0])
-		#print(row[0])
-	print("reads gathered\n")
+def parse_score(AS_field):
+	#This parses the AS tag field into just the value
+	return int(AS_field.rsplit('AS:i:', 1)[1])
+def calc_ref_covered(line):
+	#calculate the (end_ref-mapping - start_ref-mapping)/ref_length
+	return (float(line[8]) - float(line[7]))/float(line[6])
+def classify_and_output():
+	#determine output type and output
+	if ref_length_covered > 0.95:
+		output_line = f"{readname.split(':')[0]}\t{readname.split(':')[1]}\t{readname.split(':')[2]}\t{feature}:{variant}\t{score}"
+		#print(output_line)
+		output.write(output_line + "\n")
+	elif ref_length_covered > 0.8:
+		output_line = f"{readname.split(':')[0]}\t{readname.split(':')[1]}\t{readname.split(':')[2]}\t{feature}:{variant}^\t{score}"
+		#print(output_line)
+		output.write(output_line + "\n")
+	else:
+		output_line = f"{readname.split(':')[0]}\t{readname.split(':')[1]}\t{readname.split(':')[2]}\t{feature}:Unmapped\t{score}"
+		#print(output_line)
+		output.write(output_line + "\n")
 
-### Keep the hightest alignment score for each read and output the readname, reference name, and score
+##### Keep the highest alignment score for each read and output the readname, reference (which variant), and score
 with open(calls_output,"w") as output:
-	for readname in readnames:
-		#print(readname)
-		variant = "Error"
-		score = 0
+	with open(paf_file,'r') as paf:
+		paf_reader = csv.reader(paf, delimiter='\t', quoting=csv.QUOTE_NONE)
+
+		readname = "readname:unit#:start_pos"
+		variant = "variant"
+		score = "score"
 		ref_length_covered = 0.0
-		with open(paf_file,'r') as paf2:
-			paf_reader2 = csv.reader(paf2, delimiter='\t', quoting=csv.QUOTE_NONE)
-			### save the values for the best scoring match
-			for row in paf_reader2:
-				if readname == row[0] and row[4] != '*':
-					current_score = int(row[14].rsplit('AS:i:', 1)[1]) #### this parses the AS tag field into just the value
-					#print("%s\t%s\t%s" % (row[5],current_score,current_ref_cov))
-					if current_score > score:
-						variant = row[5]
-						score = current_score
-						ref_length_covered = (float(row[8]) - float(row[7]))/float(row[6])
 
-		### determine output type
-		if ref_length_covered > 0.95:
-			output_line = f"{readname.split(':')[0]}\t{readname.split(':')[1]}\t{readname.split(':')[2]}\t{feature}:{variant}\t{score}"
-			#print(output_line)
-			output.write(output_line + "\n")
-		elif ref_length_covered == 0.0:
-			output_line = f"{readname.split(':')[0]}\t{readname.split(':')[1]}\t{readname.split(':')[2]}\t{feature}:Unmapped\tNA"
-			print(output_line)
-			output.write(output_line + "\n")
-		else:
-			output_line = f"{readname.split(':')[0]}\t{readname.split(':')[1]}\t{readname.split(':')[2]}\t{feature}:{variant}^\t{score}"
-			#print(output_line)
-			output.write(output_line + "\n")
-			
+		##### output the values for the best scoring match of the previous readname when a new readname is encountered
+		for row in paf_reader:
+			### If changed to a new readname, output the old and reset the variables
+			if row[0] != readname:
+				classify_and_output()
 
-subprocess.run("sort %s -o %s" % (calls_output,calls_output), shell=True)
+				###reset the variables
+				readname = row[0]
+				variant = row[5]
+				if row[4] == "*":
+					score = "NA"
+					ref_length_covered = 0.0
+				else:
+					score = parse_score(row[14])
+					ref_length_covered = calc_ref_covered(row)
+			### If not a new readname, compare the current line's score with the previous highest score.
+			else:
+				#This block may be largely unnecessary - minimap2 appears to output the highest AS first.
+				#Unless other comparisons are made between mappings for QC, comparing scores is superfluous.
+				current_score = parse_score(row[14])
+				#print("%s\t%s\t%s" % (row[5],current_score,current_ref_cov))
+				if current_score > score:
+					variant = row[5]
+					score = current_score
+					ref_length_covered = calc_ref_covered(row)
+
+		##### Output the final best score (as there is no new readname to trigger output).
+		classify_and_output()
