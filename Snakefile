@@ -1,5 +1,5 @@
 configfile: "config.yaml"
-localrules: fa_to_fq, map_for_splitting, to_split_fq, call_splitfq, merge_calls, format_calls
+localrules: fa_to_fq, to_split_fq, call_splitfq, merge_calls, format_calls #,map_for_splitting
 
 ###minimap2 and paf-mappings_to-split-fq_sm.py can take .fa or .fq inputs and produce outputs which function downstream and maintain q scores, if present, in split fastqs.
 ###Using a duplicate for the mapping_for_split and splitter rules allows either .fa or .fq as inputs while still requiring a proper file extesion of either .fa or .fq
@@ -26,8 +26,8 @@ rule map_for_splitting:
     output:
         "map_to_split/{sample}_to_split-ref.paf"
     params:
-        ppn="1",
-        vmem="8gb",
+        ppn="4",
+        vmem="12gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
