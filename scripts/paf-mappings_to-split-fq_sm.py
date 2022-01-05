@@ -33,7 +33,7 @@ def generate_outputs():
 	###Loop through the input fastq, looking for reads that match the alignment name
 	for read in input_fq:
 		if current_aln_name == read.name.split()[0]:
-			print(current_aln_name)
+			#print(current_aln_name)
 
 			##Calculate and add the final position to positions
 			read_length = len(read.sequence)
