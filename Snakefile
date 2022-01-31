@@ -94,7 +94,7 @@ rule format_calls:
     input:
         "merged_calls/{sample}_mergedcalls.tsv"
     output:
-        "formatted_calls/{sample}.feat"
+        "feature_calls/{sample}.feat"
     params:
         ppn="1",
         vmem="8gb",
