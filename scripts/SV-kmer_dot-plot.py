@@ -5,12 +5,13 @@ import random
 
 ###
 
-if len(sys.argv)!=3:
-	print("\tERROR: please input a .feat file and a window size", file=sys.stderr)
+if len(sys.argv)!=4:
+	print("\tERROR: please input a subject .feat file, a query .feat file, and a window size", file=sys.stderr)
 	sys.exit(2)
 
-feat_file = sys.argv[1]
-SVkmer_win = int(sys.argv[2]) #Perhaps need to catch errors where window is larger than the input feat lines
+feat_file1 = sys.argv[1]
+feat_file2 = sys.argv[2]
+SVkmer_win = int(sys.argv[3]) #Perhaps need to catch errors where window is larger than the input feat lines
 
 ###Functions
 def calc_dr(parsed_feats, win_size):
@@ -32,30 +33,33 @@ def calc_dr(parsed_feats, win_size):
 	return tandem_dup_count, total_count
 
 ###read in the feat file
-with open(feat_file, 'r') as feat_obj:
-	feature_lines = [[x[0],x[1].split(",")] for x in csv.reader(feat_obj, delimiter = "\t")]
+with open(feat_file1, 'r') as feat_obj1, open(feat_file2, 'r') as feat_obj2:
+	feature_lines1 = [[x[0],x[1].split(",")] for x in csv.reader(feat_obj1, delimiter = "\t")]
+	feature_lines2 = [[x[0],x[1].split(",")] for x in csv.reader(feat_obj2, delimiter = "\t")]
 	#print(feature_lines)
 	###Itereate through each line
-	for line1 in feature_lines:
-		###Iterate through windows of line1
-		for i in range(len(line1[1][:-SVkmer_win+1])):
-			output_list = [line1[0]]
 
-			###against each line including self
-			for line2 in feature_lines:
-				#seperate each sequence
-				for x in range(10):
-					output_list.append("NA")
 
-				###Iterate through windows of line2
-				for j in range(len(line2[1][:-SVkmer_win+1])):
-					#print(f"{line1[1][i:i+SVkmer_win]}\t{line2[1][j:j+SVkmer_win]}")
-					if line1[1][i:i+SVkmer_win] == line2[1][j:j+SVkmer_win]:
-						output_list.append("1")
-					else:
-						output_list.append("0")
+for line1 in feature_lines1:
+	###Iterate through windows of line1
+	for i in range(len(line1[1][:-SVkmer_win+1])):
+		output_list = [line1[0]]
 
-			print("\t".join(output_list))
+		###against each line including self
+		for line2 in feature_lines2:
+			#seperate each sequence
+			for x in range(10):
+				output_list.append("NA")
 
-		for x in range(10):
-			print("\t".join(["NA" for x in output_list]))
+			###Iterate through windows of line2
+			for j in range(len(line2[1][:-SVkmer_win+1])):
+				#print(f"{line1[1][i:i+SVkmer_win]}\t{line2[1][j:j+SVkmer_win]}")
+				if line1[1][i:i+SVkmer_win] == line2[1][j:j+SVkmer_win]:
+					output_list.append("1")
+				else:
+					output_list.append("0")
+
+		print("\t".join(output_list))
+
+	for x in range(10):
+		print("\t".join(["NA" for x in output_list]))

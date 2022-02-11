@@ -30,7 +30,7 @@ with open(merged_calls_file,'r') as merged_calls, open(features_file,"w") as fea
 	working_features_string = "feature_variant_calls" # column name in first line
 	working_startpos_string = "unit_start_pos" # column name in first line
 
-	for input_line in merged_calls:
+	for i, input_line in enumerate(merged_calls):
 		current_readname = input_line.split("\t")[0]
 
 		if current_readname == working_readname:
@@ -40,8 +40,9 @@ with open(merged_calls_file,'r') as merged_calls, open(features_file,"w") as fea
 			working_startpos_string = working_startpos_string + "," + input_line.split("\t")[2]
 
 		else:
-			#write the finished line from the previous readname
-			write_line()
+			#write the finished line from the previous readname if not first line
+			if i != 0:
+				write_line()
 			#reset with initial values
 			working_readname = current_readname
 			working_features_string = find_features(input_line)

@@ -55,10 +55,12 @@ with open(calls_output,"w") as output:
 		ref_length_covered = 0.0
 
 		##### output the values for the best scoring match of the previous readname when a new readname is encountered
-		for row in paf_reader:
+		for i, row in enumerate(paf_reader):
 			### If changed to a new readname, output the old and reset the variables
 			if row[0] != readname:
-				classify_and_output()
+				#ouput the old as long as not first line
+				if i != 0:
+					classify_and_output()
 
 				###reset the variables
 				readname = row[0]
