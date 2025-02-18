@@ -1,22 +1,11 @@
 #!/usr/bin/env python3
 import sys
-import subprocess
 import csv
 
 
 ### Takes a paf alignment file (with AS tag, as from minimap2) and outputs the name of the highest scoring reference
 ### and the best AS alignment score tag while also filtering out low quality matches
-
-
 ### Built for use with 'minimap2 -c' which outputs paf with cigar and AS tags
-
-# if len(sys.argv)!=3:
-# 	print("ERROR:  please provide a paf with AS tags and a name, no more, no less\n")
-# 	sys.exit(2)
-
-# paf_file = sys.argv[1]
-# feature = sys.argv[2]
-# calls_output = "%s_calls.tsv" % paf_file.rsplit('.', 1)[0]
 
 paf_file = snakemake.input[0]
 feature = snakemake.wildcards.feature
@@ -44,43 +33,43 @@ def classify_and_output():
 		#print(output_line)
 		output.write(output_line + "\n")
 
+
 ##### Keep the highest alignment score for each read and output the readname, reference (which variant), and score
-with open(calls_output,"w") as output:
-	with open(paf_file,'r') as paf:
-		paf_reader = csv.reader(paf, delimiter='\t', quoting=csv.QUOTE_NONE)
+with open(calls_output,"w") as output, open(paf_file,'r') as paf:
+	paf_reader = csv.reader(paf, delimiter='\t', quoting=csv.QUOTE_NONE)
 
-		readname = "readname:unit#:start_pos"
-		variant = "variant"
-		score = "score"
-		ref_length_covered = 0.0
+	readname = "readname:unit#:start_pos"
+	variant = "variant"
+	score = "score"
+	ref_length_covered = 0.0
 
-		##### output the values for the best scoring match of the previous readname when a new readname is encountered
-		for i, row in enumerate(paf_reader):
-			### If changed to a new readname, output the old and reset the variables
-			if row[0] != readname:
-				#ouput the old as long as not first line
-				if i != 0:
-					classify_and_output()
+	##### output the values for the best scoring match of the previous readname when a new readname is encountered
+	for i, row in enumerate(paf_reader):
+		### If changed to a new readname, output the old and reset the variables
+		if row[0] != readname:
+			#ouput the old as long as not first line
+			if i != 0:
+				classify_and_output()
 
-				###reset the variables
-				readname = row[0]
-				variant = row[5]
-				if row[4] == "*":
-					score = "NA"
-					ref_length_covered = 0.0
-				else:
-					score = parse_score(row[14])
-					ref_length_covered = calc_ref_covered(row)
-			### If not a new readname, compare the current line's score with the previous highest score.
+			###reset the variables
+			readname = row[0]
+			variant = row[5]
+			if row[4] == "*":
+				score = "NA"
+				ref_length_covered = 0.0
 			else:
-				#This block may be largely unnecessary - minimap2 appears to output the highest AS first.
-				#Unless other comparisons are made between mappings for QC, comparing scores is superfluous.
-				current_score = parse_score(row[14])
-				#print("%s\t%s\t%s" % (row[5],current_score,current_ref_cov))
-				if current_score > score:
-					variant = row[5]
-					score = current_score
-					ref_length_covered = calc_ref_covered(row)
+				score = parse_score(row[14])
+				ref_length_covered = calc_ref_covered(row)
+		### If not a new readname, compare the current line's score with the previous highest score.
+		else:
+			#This block may be largely unnecessary - minimap2 appears to output the highest AS first.
+			#Unless other comparisons are made between mappings for QC, comparing scores is superfluous.
+			current_score = parse_score(row[14])
+			#print("%s\t%s\t%s" % (row[5],current_score,current_ref_cov))
+			if current_score > score:
+				variant = row[5]
+				score = current_score
+				ref_length_covered = calc_ref_covered(row)
 
-		##### Output the final best score (as there is no new readname to trigger output).
-		classify_and_output()
+	##### Output the final best score (as there is no new readname to trigger output).
+	classify_and_output()

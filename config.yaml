@@ -1,12 +1,12 @@
 FEATURES:
-    - A # DRF_full3ETS_VARs3
-    - B # IGS_DRF_consensuses12
-    - C # DRF_5ETS_VARs
-    - D # 18S_1stdel
-    - E # 18S_2nddel
-    - F # AtGP2_I near NOR2S
-    - G # SalI-5'ETS deletion
-    - H # 18S-SalI deletion
-    - I # telomere repeats
+#    - A # DRF_full3ETS_VARs3
+    - B # IGS_DRF_consensuses20
+#    - C # DRF_5ETS_VARs
+#    - D # 18S_1stdel
+#    - E # 18S_2nddel
+#    - F # AtGP2_I near NOR2S
+#    - G # SalI-5'ETS deletion
+#    - H # 18S-SalI deletion
+#    - I # telomere repeats
 Splitting_Seq: refs/25S_rDNA_Col-0_consensus.fa
 MIN_ALIGN_LENGTH: 1000

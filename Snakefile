@@ -26,8 +26,8 @@ rule map_for_splitting:
     output:
         "map_to_split/{sample}_to_split-ref.paf"
     params:
-        ppn="4",
-        vmem="12gb",
+        ppn="6",
+        vmem="24gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
@@ -44,7 +44,7 @@ rule to_split_fq:
     params:
         min_len=config["MIN_ALIGN_LENGTH"],
         ppn="1",
-        vmem="16gb",
+        vmem="12gb",
         walltime="8:00:00"
     conda:
         "envs/pysam.yaml"
@@ -59,7 +59,7 @@ rule map_splitfq:
         "split_mapping/{sample}_split_to_{feature}.cig_paf"
     params:
         ppn="2",
-        vmem="8gb",
+        vmem="16gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
@@ -74,7 +74,7 @@ rule call_splitfq:
     params:
         ppn="1",
         vmem="8gb",
-        walltime="12:00:00"
+        walltime="8:00:00"
     script:
         "scripts/multi_alignment_paf_caller_sm.py"
 
@@ -101,3 +101,35 @@ rule format_calls:
         walltime="1:00:00"
     script:
         "scripts/format_feature_calls_sm.py"
+
+### The following rules are for quantifying transcripts or other whole reads
+### (quantitative sequencing - qs) along a target .feat file
+rule map_qs_to_feature:
+    input:
+        "features/{feature}.fa",
+        "quant_seq/{qs_run}.fq"
+    output:
+        "qs_mapped/{qs_run}_to_{feature}.cig_paf"
+    params:
+        ppn="2",
+        vmem="10gb",
+        walltime="8:00:00"
+    conda:
+        "envs/minimap2.yaml"
+    shell:
+        "minimap2 -c --secondary=no -t {params.ppn} -x map-ont {input[0]} {input[1]} > {output[0]}"
+
+rule make_qs_track:
+    input:
+        "feature_calls/{sample}.feat",
+        "qs_mapped/{qs_run}_to_{feature}.cig_paf",
+        "qs_select_variants/{sel_var}_variants.txt"
+    output:
+        "qs_tracks/{sample}_with_{qs_run}_to_{feature}_at_{sel_var}.tsv"
+    params:
+        ppn="1",
+        vmem="10gb",
+        walltime="8:00:00"
+    script:
+        "scripts/qs_to_track_sm.py"
+
