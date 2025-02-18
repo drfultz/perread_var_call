@@ -8,10 +8,10 @@ Next, install a copy of the project:
 ```
 git clone https://github.com/drfultz/perread_var_call.git
 cd perread_var_call
-touch input_sequence/1000_test.fq
-snakemake -j 1 --use-conda feature_calls/1000_test.feat
+touch input_sequence/reference-test.fq
+snakemake -j 1 --use-conda feature_calls/reference-test.feat
 ```
-Included in the repository are test inputs and a matching final output that is initially empty.  It will likely take several minutes for conda to install all of the dependencies.  It will also take several minutes for the pipeline itself to run.  Upon completion, the initially empty file `feature_calls/1000_test.feat` should be rewritten and contain two header lines followed by 15 lines of feature calls (which correspond to a subset of the input .fq entries that contained repeat sequence).
+Included in the repository are test inputs and a matching final output that is initially empty.  It will likely take several minutes for conda to install all of the dependencies.  It will also take several minutes for the pipeline itself to run.  Upon completion, the initially empty file `feature_calls/reference-test.feat` should be rewritten with content.
 
 ### Running your own variant calling
 #### Basic setup
@@ -54,10 +54,10 @@ For both applications keep in mind that the default settings of the mapping prog
 ##### Choice of Splitting_Seq and MIN_ALIGN_LENGTH
 The `Splitting_Seq` .fa file is used as the point where reads are divided into repeats units (the first nucleotide of the mapping is the start point for each segment).  Thus, it is important for this sequence to be well conserved in all repeats and free of SVs, so that it can be recognized consistently in low accuracy reads.  The `MIN_ALIGN_LENGTH` parameter should probably be in the hundreds of bp or higher, depending on repeat size, repeat conservation, and the users desire for sensitivity vs. accuracy when splitting.  The sequence in the `Splitting_Seq` .fa file can be much longer than the `MIN_ALIGN_LENGTH` if desired.  This would cause any match within this region to be used to split even if the rest of the region is absent.
 
-#### Quantitative data
-When using this pipeline to define the variants present on a reference sequence, some types of quantitative sequencing data (for example RNA-seq, Pore-C, etc.) may be analyzed with it as well.  The quantitative data (a `.fq` in the `quant_seq` folder) is first mapped to a `features` fasta file and these mappings are then quantified, normalized, and distributed onto each occurence of the variants in the reference `.feat` file.  Select variants to be used (typically those that are rare and/or region-specific) are specified as a sepearte input in the `qs_select_variants` folder.  This results in a data track (in `qs_tracks`) of 'enrichment' of each unit on the reference (with the select variants).  The quantitative sequencing data should have read lengths and variation that is sufficient for each read to be unambiguously mapped to one variant in the `features` fasta.
+### Quantitative data
+When using this pipeline to define the variants present on a reference sequence, some types of quantitative sequencing data (for example RNA-seq, Pore-C, etc.) may be analyzed with it as well.  The quantitative data (a `.fq` in `quant_seq/`) is first mapped to a `features/` fasta file and these mappings are then quantified, normalized, and distributed onto each occurence of the variants in the reference `.feat` file.  Select variants to be used (typically those that are rare and/or region-specific) are specified as a separate input in the `qs_select_variants/` folder.  This results in a data track (in `qs_tracks/`) of 'enrichment' of each unit on the reference (with the select variants).  The quantitative sequencing data should have read lengths and variation that is sufficient for each read to be unambiguously mapped to one variant in the `features/` fasta. `find_localized_variants.py` can be used to define the select variants.
 
-#### Limitations
+### Limitations
 Currently, this pipeline does not classify the orientation of individual units in reads.  For some repeat regions, this information could be mandatory for assembly, so this feature may be added in the future.  Similarly, the structure within individual units (for example the ordering of each of the examined features/SVs) is not considered as it is assumed that different units are all structured in the same fashion.
 
 ### Pipeline Workflow
