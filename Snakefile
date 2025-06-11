@@ -26,8 +26,8 @@ rule map_for_splitting:
     output:
         "map_to_split/{sample}_to_split-ref.paf"
     params:
-        ppn="6",
-        vmem="24gb",
+        ppn="4",
+        vmem="16gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
@@ -43,6 +43,7 @@ rule to_split_fq:
         "split_sequence/{sample}_split.fq"
     params:
         min_len=config["MIN_ALIGN_LENGTH"],
+        reorient=config["REORIENT"],
         ppn="1",
         vmem="12gb",
         walltime="8:00:00"
@@ -58,8 +59,8 @@ rule map_splitfq:
     output:
         "split_mapping/{sample}_split_to_{feature}.cig_paf"
     params:
-        ppn="2",
-        vmem="16gb",
+        ppn="8",
+        vmem="24gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
@@ -116,7 +117,7 @@ rule map_qs_to_feature:
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
-    shell:
+    shell:  # may need to use -x sr for short reads
         "minimap2 -c --secondary=no -t {params.ppn} -x map-ont {input[0]} {input[1]} > {output[0]}"
 
 rule make_qs_track:

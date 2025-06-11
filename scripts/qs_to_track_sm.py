@@ -79,7 +79,7 @@ with open(feat_file, "r") as feat, open(sel_var_file, "r") as sel_feats, open(tr
 		#each line (chromosome) gets it's own count reset (however, output merges all lines into unbroken columns) 
 		count = 0
 		#loop through the feature call fields of each line and output a normalized value for each match
-		for call in fline[1].split(","):
+		for call,pos in zip(fline[1].split(","),fline[2].split(",")):
 			count += 1
 
 			name = f"{fline[0]}:{str(count).zfill(4)}"
@@ -95,4 +95,4 @@ with open(feat_file, "r") as feat, open(sel_var_file, "r") as sel_feats, open(tr
 			else:
 				value = "NA"
 			
-			output.write(f"{name}\t{value}\n")
+			output.write(f"{name}\t{pos}\t{value}\n")

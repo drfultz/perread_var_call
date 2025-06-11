@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 import pysam
-import sys
-import subprocess
 import csv
 
 ### Takes a paf alignment file and uses the beginning position of target mappings to split
@@ -16,7 +14,7 @@ import csv
 
 ### Intended to split long multi-repeat ONT reads into single rDNA units by first aligning them to a 25S reference
 
-
+# import sys
 # paf_file = sys.argv[1]
 # input_fq_file = sys.argv[2]
 # min_align_length = 1000 #alignment length may need to be altered for each reference
@@ -25,7 +23,6 @@ import csv
 
 paf_file = snakemake.input[0]
 input_fq_file = snakemake.input[1]
-min_align_length = snakemake.params.min_len
 output_oriented_file = snakemake.output[0]
 output_tagged_file = snakemake.output[1]
 
@@ -33,7 +30,6 @@ def generate_outputs():
 	###Loop through the input fastq, looking for reads that match the alignment name
 	for read in input_fq:
 		if current_aln_name == read.name.split()[0]:
-			#print(current_aln_name)
 
 			##Calculate and add the final position to positions
 			read_length = len(read.sequence)
@@ -42,29 +38,23 @@ def generate_outputs():
 			##ensure that positions is only unique elements and sort
 			positions = list(set(pre_positions)) 
 			positions.sort()
-			#print(positions)
 
 			##Initialize
-			orientation = ""
 			oriented_sequence = ""
 			oriented_qualities = ""
 			oriented_positions = []
 
-			##Reverse complement sequence and qualitites if needed
-			if num_R_mappings > num_F_mappings: #if mostly R direction, reverse complement
-				orientation = "RC"
+			##Reverse complement sequence and qualitites if set to do so and there are more R mappings
+			if snakemake.params.reorient == "Y" and  num_R_mappings > num_F_mappings: #if mostly R direction, reverse complement
 				oriented_sequence = read.sequence.translate(str.maketrans('ACGTacgtRYMKrymkVBHDvbhd', 'TGCAtgcaYRKMyrkmBVDHbvdh'))[::-1]
 				if read.quality is not None:
 					oriented_qualities = read.quality[::-1]
 				oriented_positions = [read_length - x for x in positions][::-1]
 			else:
-				orientation = "unaltered"
 				oriented_sequence = read.sequence
 				if read.quality is not None:
 					oriented_qualities = read.quality #"".join([chr(x + 33) for x in read.quality])
 				oriented_positions = positions
-			#print(orientation)
-			#print(oriented_positions)
 
 			##Write the whole original read in it's oriented state
 			x = pysam.FastxRecord()
@@ -78,7 +68,6 @@ def generate_outputs():
 			count = 0
 			for begin,end in zip(oriented_positions[:-1],oriented_positions[1:]):
 				count += 1
-				#print(begin, "\t: ", end, "\tlength", len(oriented_sequence[begin:end]))
 				a = pysam.FastxRecord()
 				a.name = "%s:%s:%s" % (current_aln_name,str(count).zfill(2),begin)
 				a.sequence = oriented_sequence[begin:end]
@@ -121,7 +110,7 @@ with open(paf_file,"r") as paf, open(output_oriented_file, "w") as output_orient
 			num_R_mappings = 0
 
 		#####For the current alignment, if it is above the minimum alignment length...
-		if (int(aln[8]) - int(aln[7])) > min_align_length:
+		if (int(aln[8]) - int(aln[7])) > snakemake.params.min_len:
 			###...add to either reverse mappings...
 			if aln[4] == "-":
 				num_R_mappings += 1
