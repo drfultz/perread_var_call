@@ -1,10 +1,7 @@
 configfile: "config.yaml"
-localrules: fa_to_fq, to_split_fq, call_splitfq, merge_calls, format_calls #,map_for_splitting
+localrules: fa_to_fq, to_split_fq, call_splitfq, merge_calls, format_calls
 
-###minimap2 and paf-mappings_to-split-fq_sm.py can take .fa or .fq inputs and produce outputs which function downstream and maintain q scores, if present, in split fastqs.
-###Using a duplicate for the mapping_for_split and splitter rules allows either .fa or .fq as inputs while still requiring a proper file extesion of either .fa or .fq
-
-#temp rule
+###fasta input files are converted to fastq so that either format can go into the pipeline
 rule fa_to_fq:
     input:
         "input_sequence/{sample}.fa"
@@ -26,8 +23,8 @@ rule map_for_splitting:
     output:
         "map_to_split/{sample}_to_split-ref.paf"
     params:
-        ppn="4",
-        vmem="16gb",
+        ppn="3",
+        vmem="12gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
@@ -104,7 +101,7 @@ rule format_calls:
         "scripts/format_feature_calls_sm.py"
 
 ### The following rules are for quantifying transcripts or other whole reads
-### (quantitative sequencing - qs) along a target .feat file
+### (qs stands for quantitative sequencing) along a target .feat file
 rule map_qs_to_feature:
     input:
         "features/{feature}.fa",
@@ -112,13 +109,13 @@ rule map_qs_to_feature:
     output:
         "qs_mapped/{qs_run}_to_{feature}.cig_paf"
     params:
-        ppn="2",
-        vmem="10gb",
+        ppn="4",
+        vmem="12gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
     shell:  # may need to use -x sr for short reads
-        "minimap2 -c --secondary=no -t {params.ppn} -x map-ont {input[0]} {input[1]} > {output[0]}"
+        "minimap2 -c --secondary=no -t {params.ppn} -x sr {input[0]} {input[1]} > {output[0]}"
 
 rule make_qs_track:
     input:
