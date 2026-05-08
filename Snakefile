@@ -1,5 +1,5 @@
 configfile: "config.yaml"
-localrules: fa_to_fq, to_split_fq, call_splitfq, merge_calls, format_calls
+localrules: fa_to_fq, to_split_fq, call_splitfq, format_calls
 
 ###fasta input files are converted to fastq so that either format can go into the pipeline
 rule fa_to_fq:
@@ -76,21 +76,9 @@ rule call_splitfq:
     script:
         "scripts/multi_alignment_paf_caller_sm.py"
 
-rule merge_calls:
-    input:
-        ["split_calls/{{sample}}_callsfor_{feat}.tsv".format(feat=f) for f in config["FEATURES"]]
-    output:
-        "merged_calls/{sample}_mergedcalls.tsv"
-    params:
-        ppn="1",
-        vmem="8gb",
-        walltime="1:00:00"
-    shell:
-        "paste {input} > {output}"
-
 rule format_calls:
     input:
-        "merged_calls/{sample}_mergedcalls.tsv"
+        ["split_calls/{{sample}}_callsfor_{feat}.tsv".format(feat=f) for f in config["FEATURES"]]
     output:
         "feature_calls/{sample}.feat"
     params:

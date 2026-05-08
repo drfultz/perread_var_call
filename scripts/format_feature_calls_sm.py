@@ -1,52 +1,64 @@
 #!/usr/bin/env python3
 import sys
-import re
 
-### Find var calls for every feature in a unit and merge them into a features entry,
-### then merge each features entry into a features field (2nd field). Unit start positions are
-### also merged into a list as the third field.  In this way, each read is output as
-### a single line in a '.feat' file.
+### For each readname (first field), find feature calls from every input file, combine the calls for each unit together,
+### then join these units together to form a features field (2nd field). Unit start positions are also joined
+### into a list as the third field.  In this way, the feature calling for each read is output as a single line in
+### a '.feat' file.
 ###
-### Assumes a sorted input.
+### Assumes lines with the same readname are all adjacent and ordered by unit.
 
 #merged_calls_file = sys.argv[1]
 #features_file = "%s.feat" % merged_calls_file.rsplit('.', 1)[0]
 
-merged_calls_file = snakemake.input[0]
+calls_files = snakemake.input
 features_file = snakemake.output[0]
 
-
+# format and write output
 def write_line():
 	output_line = f"{working_readname}\t{working_features_string}\t{working_startpos_string}"
 	#print(output_line)
 	features_out.write(output_line + "\n")
+# extract and join the variant calls from the list made from the input files
 def find_features(line):
-	#look for but exclude tabs on first side, tab or newline on second side
-	features = re.findall(r"[^\t]+:[^\t\n]+", line)
+	features = []
+	for calls in line:
+		features.append(calls[3])
 	return "&".join(features)
 
-with open(merged_calls_file,'r') as merged_calls, open(features_file,"w") as features_out:
-	working_readname = f"{merged_calls_file}" # makes the first output line start with the filename
-	working_features_string = "feature_variant_calls" # column name in first line
-	working_startpos_string = "unit_start_pos" # column name in first line
+### Iterate the input files, and join the lines with the same line number from each file into lists
+merged_calls = []
+for file_name in calls_files:
+	with open(file_name, 'r') as calls:
+		if not merged_calls: # if empty (first file)
+			for line in calls:
+				merged_calls.append([line.split("\t")])
+		else: #subsequent files
+			for i,line in enumerate(calls):
+				merged_calls[i].append(line.split("\t"))
 
-	for i, input_line in enumerate(merged_calls):
-		current_readname = input_line.split("\t")[0]
+### extract feature calls from the formatted inputs and output them as one line per readname
+with open(features_file,"w") as features_out:
+	working_readname = None
+
+	for i, joined_line in enumerate(merged_calls):
+		current_readname = joined_line[0][0]
 
 		if current_readname == working_readname:
 			#Append additional features and positions			
-			next_features_string = find_features(input_line)
+			next_features_string = find_features(joined_line)
 			working_features_string = working_features_string + "," + next_features_string
-			working_startpos_string = working_startpos_string + "," + input_line.split("\t")[2]
+			working_startpos_string = working_startpos_string + "," + joined_line[0][2]
 
 		else:
 			#write the finished line from the previous readname if not first line
 			if i != 0:
 				write_line()
+
 			#reset with initial values
 			working_readname = current_readname
-			working_features_string = find_features(input_line)
-			working_startpos_string = input_line.split("\t")[2]
+			working_features_string = find_features(joined_line)
+			working_startpos_string = joined_line[0][2]
 
 	###write the final line
 	write_line()
