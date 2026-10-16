@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
 import csv
+import sys
 
-### Takes a paf alignment file (with AS tag, as from minimap2)
+### !!! This is a draft script used for a quick analysis. Use with caution. It assumes mapped reads are generally
+### informative, which may not be the case with certain features / read lengths.
+
+### Quantifies reads from an expression assay (e.g. RNA-seq) against the known variants of a single feature,
+### then projects that quantification onto the units of a .feat file to produce a track of relative
+### expression along each read or assembled array. Reads are assumed to be pre-filtered to informative lengths.
+
+### Inputs are 1) a .feat file of feature calls, 2) a .paf from a minimap2 alignment of the expression reads
+### (as query) to the feature's variant sequences (as reference), and 3) a list of selected variants if
+### filtering by variants is desired.
+
+### Each read is counted once and reads with MAPQ 0 are excluded. For each variant, its share of counted reads
+### is divided by its share of full-length calls in the .feat file and scaled as ratio/(ratio+1), so 0.5 means
+### expression in proportion to copy number, values toward 1 or 0 mean over- or under-expression, and 0 means
+### no reads. The output has one line per unit (name, start position, value); variants not in the selected list
+### are given negative values, and partial or unmapped calls are NA.
 
 feat_file = snakemake.input[0]
 paf_file = snakemake.input[1]
@@ -13,25 +29,25 @@ target_feat = snakemake.wildcards.feature
 ##### Open paf and loop through to sum counts of hits by feature mapped to
 with open(paf_file, "r") as paf:
 	paf_reader = csv.reader(paf, delimiter='\t', quoting=csv.QUOTE_NONE)
-	prev_name = ""
+	used_readnames = set()
 	read_counts_dict = {}
 	pass_reads = 0
 	for pline in paf_reader:
-		new_name = pline[0]
 		#if duplicated readname, skip or if matching residues / reference length is low (inaccurate mapping), skip
-		if new_name == prev_name:# or int(pline[9])/int(pline[6]) < 0.98:
-			print(f"{new_name} skipped for being dup of {prev_name} or low mapping % {int(pline[9])/int(pline[6])}")
+		if pline[0] in used_readnames:# or int(pline[9])/int(pline[6]) < 0.98:
+			print(f"{pline[0]} skipped for being duplicate")
+			continue
+		#if MAPQ is 0 (mapped equally as well to multiple refs), skip read
+		if int(pline[11]) == 0:
 			continue
 
+		used_readnames.add(pline[0])
 		pass_reads +=1
 		#if reference name is not in dictionary, create entry, else add one to entry
 		if pline[5] not in read_counts_dict:
 			read_counts_dict[pline[5]] = 1
 		else:
 			read_counts_dict[pline[5]] += 1
-
-		#reset for next loop	
-		prev_name = new_name
 
 ##### Open feat file for initial loop in order to sum counts of feat calls
 with open(feat_file, "r") as feat:
@@ -55,7 +71,7 @@ with open(feat_file, "r") as feat:
 		sys.exit(2)
 
 
-	### build dict of counts of calls used in feature_calls file
+	### build dict of counts of confident calls used in feature_calls file
 	# open reader for feat file
 	feat_reader1 = csv.reader(feat, delimiter='\t', quoting=csv.QUOTE_NONE)
 	featcall_dict = {}
@@ -64,8 +80,8 @@ with open(feat_file, "r") as feat:
 	for fline1 in feat_reader1:
 		for calls1 in fline1[1].split(","):
 			variant = calls1.split("&")[field_num].split(":")[1]
-			#if value is Unmapped or ^, don't count in total or add to dict
-			if variant == "Unmapped" or variant[-1] == "^":
+			#if value is Unmapped or %, don't count in total or add to dict
+			if variant == "Unmapped" or variant[-1] == "%":
 				print(f"{variant} not used")
 				continue
 

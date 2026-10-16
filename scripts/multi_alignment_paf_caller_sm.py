@@ -10,6 +10,8 @@ import csv
 paf_file = snakemake.input[0]
 feature = snakemake.wildcards.feature
 calls_output = snakemake.output[0]
+variant_len_cov_min = snakemake.params.VARIANT_LEN_COV_MIN
+variant_len_cov_best = snakemake.params.VARIANT_LEN_COV_BEST
 
 
 def parse_score(AS_field):
@@ -18,58 +20,40 @@ def parse_score(AS_field):
 def calc_ref_covered(line):
 	#calculate the (end_ref-mapping - start_ref-mapping)/ref_length
 	return (float(line[8]) - float(line[7]))/float(line[6])
-def classify_and_output():
+def classify_and_output(output, readname, variant, score, variant_len_covered, variant_len_cov_min, variant_len_cov_best):
+	read_id, unit, start = readname.rsplit(":", 2)
+
 	#determine output type and output
-	if ref_length_covered > 0.95:
-		output_line = f"{readname.split(':')[0]}\t{readname.split(':')[1]}\t{readname.split(':')[2]}\t{feature}:{variant}\t{score}"
-		#print(output_line)
-		output.write(output_line + "\n")
-	elif ref_length_covered > 0.8:
-		output_line = f"{readname.split(':')[0]}\t{readname.split(':')[1]}\t{readname.split(':')[2]}\t{feature}:{variant}^\t{score}"
-		#print(output_line)
-		output.write(output_line + "\n")
+	if variant_len_covered > variant_len_cov_best:
+		output_line = f"{read_id}\t{unit}\t{start}\t{feature}:{variant}\t{score}"
+	elif variant_len_covered > variant_len_cov_min:
+		output_line = f"{read_id}\t{unit}\t{start}\t{feature}:{variant}^\t{score}"
 	else:
-		output_line = f"{readname.split(':')[0]}\t{readname.split(':')[1]}\t{readname.split(':')[2]}\t{feature}:Unmapped\t{score}"
-		#print(output_line)
-		output.write(output_line + "\n")
+		output_line = f"{read_id}\t{unit}\t{start}\t{feature}:Unmapped\t{score}"
+
+	output.write(output_line + "\n")
 
 
 ##### Keep the highest alignment score for each read and output the readname, reference (which variant), and score
 with open(calls_output,"w") as output, open(paf_file,'r') as paf:
 	paf_reader = csv.reader(paf, delimiter='\t', quoting=csv.QUOTE_NONE)
 
-	readname = "readname:unit#:start_pos"
-	variant = "variant"
-	score = "score"
-	ref_length_covered = 0.0
-
-	##### output the values for the best scoring match of the previous readname when a new readname is encountered
-	for i, row in enumerate(paf_reader):
-		### If changed to a new readname, output the old and reset the variables
-		if row[0] != readname:
-			#ouput the old as long as not first line
-			if i != 0:
-				classify_and_output()
-
-			###reset the variables
-			readname = row[0]
-			variant = row[5]
+	##### Collect the best scoring match for each readname
+	best_hits = {}
+	for row in paf_reader:
+		readname = row[0]
+		### If this is the first line for this readname, store its values
+		if readname not in best_hits:
 			if row[4] == "*":
-				score = "NA"
-				ref_length_covered = 0.0
+				best_hits[readname] = {"variant": row[5], "score": "NA", "ref_length_covered": 0.0}
 			else:
-				score = parse_score(row[14])
-				ref_length_covered = calc_ref_covered(row)
-		### If not a new readname, compare the current line's score with the previous highest score.
+				best_hits[readname] = {"variant": row[5], "score": parse_score(row[14]), "ref_length_covered": calc_ref_covered(row)}
+		### If the readname has been seen, compare the current line's score with the previous highest score.
 		else:
-			#This block may be largely unnecessary - minimap2 appears to output the highest AS first.
-			#Unless other comparisons are made between mappings for QC, comparing scores is superfluous.
 			current_score = parse_score(row[14])
-			#print("%s\t%s\t%s" % (row[5],current_score,current_ref_cov))
-			if current_score > score:
-				variant = row[5]
-				score = current_score
-				ref_length_covered = calc_ref_covered(row)
+			if current_score > best_hits[readname]["score"]:
+				best_hits[readname] = {"variant": row[5], "score": current_score, "ref_length_covered": calc_ref_covered(row)}
 
-	##### Output the final best score (as there is no new readname to trigger output).
-	classify_and_output()
+	##### Output the best scoring match for each readname
+	for readname, hit in best_hits.items():
+		classify_and_output(output, readname, hit["variant"], hit["score"], hit["ref_length_covered"], variant_len_cov_min, variant_len_cov_best)

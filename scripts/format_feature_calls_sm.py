@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import sys
+from collections import defaultdict
 
-### For each readname (first field), find feature calls from every input file, combine the calls for each unit together,
+### For each readname (first field) and read unit, find feature calls from every input file,
 ### then join these units together to form a features field (2nd field). Unit start positions are also joined
-### into a list as the third field.  In this way, the feature calling for each read is output as a single line in
-### a '.feat' file.
-###
-### Assumes lines with the same readname are all adjacent and ordered by unit.
+### into a list as the third field. In this way, the feature calling for each read is output as a single line in
+### a '.feat' file. Does not assume that all readname/unit pairings have a call for each feature.
 
 #merged_calls_file = sys.argv[1]
 #features_file = "%s.feat" % merged_calls_file.rsplit('.', 1)[0]
@@ -14,51 +13,32 @@ import sys
 calls_files = snakemake.input
 features_file = snakemake.output[0]
 
-# format and write output
-def write_line():
-	output_line = f"{working_readname}\t{working_features_string}\t{working_startpos_string}"
-	#print(output_line)
-	features_out.write(output_line + "\n")
-# extract and join the variant calls from the list made from the input files
-def find_features(line):
-	features = []
-	for calls in line:
-		features.append(calls[3])
-	return "&".join(features)
-
-### Iterate the input files, and join the lines with the same line number from each file into lists
-merged_calls = []
+##### Iterate the input files, and collect the calls from the same readname / unit pairs into a nested dict
+reads = defaultdict(dict)
 for file_name in calls_files:
-	with open(file_name, 'r') as calls:
-		if not merged_calls: # if empty (first file)
-			for line in calls:
-				merged_calls.append([line.split("\t")])
-		else: #subsequent files
-			for i,line in enumerate(calls):
-				merged_calls[i].append(line.split("\t"))
+	with open(file_name, 'r') as cur_calls:
+		### Iterate through each line from a file 
+		for line in cur_calls:
+			## Parse the line into fields
+			read_id, unit, start, call, score = line.rstrip("\n").split("\t")
+			## If the unit of a readname is not in the nested dict, add it and the start site
+			if unit not in reads[read_id]:
+				reads[read_id][unit] = (start, [])
+			## Add the call
+			reads[read_id][unit][1].append(call)
 
-### extract feature calls from the formatted inputs and output them as one line per readname
+
+##### Unpack the nested dict into output formatting and write
 with open(features_file,"w") as features_out:
-	working_readname = None
-
-	for i, joined_line in enumerate(merged_calls):
-		current_readname = joined_line[0][0]
-
-		if current_readname == working_readname:
-			#Append additional features and positions			
-			next_features_string = find_features(joined_line)
-			working_features_string = working_features_string + "," + next_features_string
-			working_startpos_string = working_startpos_string + "," + joined_line[0][2]
-
-		else:
-			#write the finished line from the previous readname if not first line
-			if i != 0:
-				write_line()
-
-			#reset with initial values
-			working_readname = current_readname
-			working_features_string = find_features(joined_line)
-			working_startpos_string = joined_line[0][2]
-
-	###write the final line
-	write_line()
+	### loop each read
+	for read_id, units in reads.items():
+		unit_calls = []
+		unit_starts = []
+ 		### Aggregate the units of a read in order
+		for unit in sorted(units, key=int):
+			unit_calls.append("&".join(units[unit][1]))
+			unit_starts.append(units[unit][0])
+ 		### Format and output
+		features_string = ",".join(unit_calls)
+		startpos_string = ",".join(unit_starts)
+		features_out.write(f"{read_id}\t{features_string}\t{startpos_string}\n")

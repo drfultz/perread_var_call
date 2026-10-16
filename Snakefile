@@ -1,5 +1,6 @@
 configfile: "config.yaml"
 localrules: fa_to_fq, to_split_fq, call_splitfq, format_calls
+wildcard_constraints: feature="|".join(config["FEATURES"])
 
 ###fasta input files are converted to fastq so that either format can go into the pipeline
 rule fa_to_fq:
@@ -9,7 +10,7 @@ rule fa_to_fq:
         "input_sequence/{sample}.fq"
     params:
         ppn="1",
-        vmem="8gb",
+        memperCPU="8gb",
         walltime="1:00:00"
     conda:
         "envs/bbmap2.yaml"
@@ -24,12 +25,12 @@ rule map_for_splitting:
         "map_to_split/{sample}_to_split-ref.paf"
     params:
         ppn="3",
-        vmem="12gb",
+        memperCPU="4gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
     shell:
-        "minimap2 -c -t {params.ppn} -x map-ont {input[0]} {input[1]} > {output[0]}"
+        "minimap2 -c --secondary=no -t {params.ppn} -x map-ont {input[0]} {input[1]} > {output[0]}"
 
 rule to_split_fq:
     input:
@@ -42,7 +43,7 @@ rule to_split_fq:
         min_len=config["MIN_ALIGN_LENGTH"],
         reorient=config["REORIENT"],
         ppn="1",
-        vmem="12gb",
+        memperCPU="8gb",
         walltime="8:00:00"
     conda:
         "envs/pysam.yaml"
@@ -57,12 +58,12 @@ rule map_splitfq:
         "split_mapping/{sample}_split_to_{feature}.cig_paf"
     params:
         ppn="8",
-        vmem="24gb",
+        memperCPU="3gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
     shell:
-        "minimap2 -c --paf-no-hit -t {params.ppn} -x map-ont {input[1]} {input[0]} > {output[0]} \n"
+        "minimap2 -c --paf-no-hit -t {params.ppn} -x map-ont {input[1]} {input[0]} > {output[0]}"
 
 rule call_splitfq:
     input:
@@ -70,20 +71,22 @@ rule call_splitfq:
     output:
         "split_calls/{sample}_callsfor_{feature}.tsv"
     params:
+        VARIANT_LEN_COV_MIN=config["VARIANT_LEN_COV_MIN"],
+        VARIANT_LEN_COV_BEST=config["VARIANT_LEN_COV_BEST"],
         ppn="1",
-        vmem="8gb",
+        memperCPU="8gb",
         walltime="8:00:00"
     script:
         "scripts/multi_alignment_paf_caller_sm.py"
 
 rule format_calls:
     input:
-        ["split_calls/{{sample}}_callsfor_{feat}.tsv".format(feat=f) for f in config["FEATURES"]]
+        expand("split_calls/{{sample}}_callsfor_{feat}.tsv", feat=config["FEATURES"])
     output:
         "feature_calls/{sample}.feat"
     params:
         ppn="1",
-        vmem="8gb",
+        memperCPU="8gb",
         walltime="1:00:00"
     script:
         "scripts/format_feature_calls_sm.py"
@@ -98,11 +101,11 @@ rule map_qs_to_feature:
         "qs_mapped/{qs_run}_to_{feature}.cig_paf"
     params:
         ppn="4",
-        vmem="12gb",
+        memperCPU="3gb",
         walltime="8:00:00"
     conda:
         "envs/minimap2.yaml"
-    shell:  # may need to use -x sr for short reads
+    shell:
         "minimap2 -c --secondary=no -t {params.ppn} -x sr {input[0]} {input[1]} > {output[0]}"
 
 rule make_qs_track:
@@ -114,7 +117,7 @@ rule make_qs_track:
         "qs_tracks/{sample}_with_{qs_run}_to_{feature}_at_{sel_var}.tsv"
     params:
         ppn="1",
-        vmem="10gb",
+        memperCPU="10gb",
         walltime="8:00:00"
     script:
         "scripts/qs_to_track_sm.py"

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import pysam
 import csv
+import sys
+from collections import defaultdict
 
 ### Takes a paf alignment file and uses the beginning position of target mappings to split
 ### fastq reads of matching names into subreads.
@@ -14,7 +16,6 @@ import csv
 
 ### Intended to split long multi-repeat ONT reads into single rDNA units by first aligning them to a 25S reference
 
-# import sys
 # paf_file = sys.argv[1]
 # input_fq_file = sys.argv[2]
 # min_align_length = 1000 #alignment length may need to be altered for each reference
@@ -25,103 +26,78 @@ paf_file = snakemake.input[0]
 input_fq_file = snakemake.input[1]
 output_oriented_file = snakemake.output[0]
 output_tagged_file = snakemake.output[1]
+min_aln_len = snakemake.params.min_len
+reorient = snakemake.params.reorient
 
-def generate_outputs():
-	###Loop through the input fastq, looking for reads that match the alignment name
-	for read in input_fq:
-		if current_aln_name == read.name.split()[0]:
+def write_outputs(read, hit, reorient, output_oriented, output_tagged):
+	##Calculate and add the final position to positions
+	read_length = len(read.sequence)
 
-			##Calculate and add the final position to positions
-			read_length = len(read.sequence)
-			pre_positions.append(read_length)
+	##ensure that positions is only unique elements and sort
+	positions = sorted(set(hit["positions"] + [read_length])) 
 
-			##ensure that positions is only unique elements and sort
-			positions = list(set(pre_positions)) 
-			positions.sort()
+	##Initialize
+	oriented_sequence = ""
+	oriented_qualities = ""
+	oriented_positions = []
 
-			##Initialize
-			oriented_sequence = ""
-			oriented_qualities = ""
-			oriented_positions = []
+	##Reverse complement sequence and qualitites if set to do so and there are more R mappings
+	if reorient == "Y" and  hit["rev"] > hit["fwd"]: #if mostly R direction, reverse complement
+		oriented_sequence = read.sequence.translate(str.maketrans('ACGTacgtRYMKrymkVBHDvbhd', 'TGCAtgcaYRKMyrkmBVDHbvdh'))[::-1]
+		if read.quality is not None:
+			oriented_qualities = read.quality[::-1]
+		oriented_positions = [read_length - x for x in positions][::-1]
+	else:
+		oriented_sequence = read.sequence
+		if read.quality is not None:
+			oriented_qualities = read.quality
+		oriented_positions = positions
 
-			##Reverse complement sequence and qualitites if set to do so and there are more R mappings
-			if snakemake.params.reorient == "Y" and  num_R_mappings > num_F_mappings: #if mostly R direction, reverse complement
-				oriented_sequence = read.sequence.translate(str.maketrans('ACGTacgtRYMKrymkVBHDvbhd', 'TGCAtgcaYRKMyrkmBVDHbvdh'))[::-1]
-				if read.quality is not None:
-					oriented_qualities = read.quality[::-1]
-				oriented_positions = [read_length - x for x in positions][::-1]
-			else:
-				oriented_sequence = read.sequence
-				if read.quality is not None:
-					oriented_qualities = read.quality #"".join([chr(x + 33) for x in read.quality])
-				oriented_positions = positions
+	##Write the whole original read in it's oriented state
+	x = pysam.FastxRecord()
+	x.name = read.name
+	x.sequence = oriented_sequence
+	x.quality = oriented_qualities
+	# print(x)
+	output_oriented.write(str(x) + "\n")
 
-			##Write the whole original read in it's oriented state
-			x = pysam.FastxRecord()
-			x.name = current_aln_name
-			x.sequence = oriented_sequence
-			x.quality = oriented_qualities
-			# print(x)
-			output_oriented.write(str(x) + "\n")
-
-			##Write the split reads (in the oriented direction) by looping through each pair of positions
-			count = 0
-			for begin,end in zip(oriented_positions[:-1],oriented_positions[1:]):
-				count += 1
-				a = pysam.FastxRecord()
-				a.name = "%s:%s:%s" % (current_aln_name,str(count).zfill(2),begin)
-				a.sequence = oriented_sequence[begin:end]
-				a.quality = oriented_qualities[begin:end]
-				#print(a)
-				output_tagged.write(str(a) + "\n")
-
-			##Readname occurences after first will be skipped.
-			break
-
-	###If no matching readname found while searching fastx
-	else: # no break was found
-		print(f"\n!!!!!!!!!!!!!!!!!!!!\nno match for {current_aln_name} found\n")
+	##Write the split reads (in the oriented direction) by looping through each pair of positions
+	count = 0
+	for begin,end in zip(oriented_positions[:-1],oriented_positions[1:]):
+		count += 1
+		a = pysam.FastxRecord()
+		a.name = f"{read.name}:{count:0{width}d}:{begin}"
+		a.sequence = oriented_sequence[begin:end]
+		a.quality = oriented_qualities[begin:end]
+		#print(a)
+		output_tagged.write(str(a) + "\n")
 
 
 with open(paf_file,"r") as paf, open(output_oriented_file, "w") as output_oriented, open(output_tagged_file, "w") as output_tagged:
+	##### Read in paf and process into dictionary of start positions
 	paf_reader = csv.reader(paf, delimiter='\t', quoting=csv.QUOTE_NONE)
-	
-	input_fq = list(pysam.FastxFile(input_fq_file)) # load fastq into RAM since it will be looped many times
-
-	#####Initialize the record values
-	current_aln_name = "ignore_this_message"
-	pre_positions = [0]
-	num_F_mappings = 0
-	num_R_mappings = 0
-
-	#####Loop through the paf once.
+	hits_dict = defaultdict(lambda: {"positions": [0], "fwd": 0, "rev": 0})
 	for aln in paf_reader:
+		if int(aln[8]) - int(aln[7]) < min_aln_len:
+			continue
+		h = hits_dict[aln[0]]
+		if aln[4] == "+":
+			h["fwd"] += 1
+			h["positions"].append(int(aln[2]))
+		else:
+			h["rev"] += 1
+			h["positions"].append(int(aln[3]))
 
-		#####If the alignment name has changed from the previous alignment record...
-		if aln[0] != current_aln_name:
+	### Test for the longest number of units in a read to set zeroes used
+	max_units = max((len(h["positions"]) for h in hits_dict.values()), default=1)
+	width = len(str(max_units))
 
-			###...generate the outputs for the previous group of alignments and write them...
-			generate_outputs()
+	##### Look for readname matches in hits from the fastq, and output when found
+	for read in pysam.FastxFile(input_fq_file):
+		hit = hits_dict.pop(read.name, None)
+		if hit is not None:
+			write_outputs(read, hit, reorient, output_oriented, output_tagged)
 
-			###...then reset for the next group of alignments.
-			current_aln_name = aln[0]
-			pre_positions = [0]
-			num_F_mappings = 0
-			num_R_mappings = 0
-
-		#####For the current alignment, if it is above the minimum alignment length...
-		if (int(aln[8]) - int(aln[7])) > snakemake.params.min_len:
-			###...add to either reverse mappings...
-			if aln[4] == "-":
-				num_R_mappings += 1
-				pre_positions.append(int(aln[3])) #for R mappings, use 'end' position
-			###...or forward mappings.
-			elif aln[4] == "+":
-				num_F_mappings += 1
-				pre_positions.append(int(aln[2])) #for F mappings use 'start' position
-			else:
-				raise Exception(f"\n\tImproperly formatted paf.\n\tField 5 should only contain '+' or '-' , but '{aln[4]}' was found")
-
-	###Generate and write the output of the last group of alignments
-	generate_outputs()
-	print()
+	### Output readnames that exist in hits (above min_aln_len) but not in fastq
+	for name in hits_dict:
+		print(f"no match for {name} found", file=sys.stderr)

@@ -10,6 +10,10 @@ FEATURES:
     - I # telomere repeats
     - J # 190bp 25S del
     - K
+
 Splitting_Seq: refs/25S_rDNA_Col-0_consensus.fa
-REORIENT: Y
-MIN_ALIGN_LENGTH: 1250
+MIN_ALIGN_LENGTH: 1000  #Splitting sequence alignment length to cause split
+REORIENT: Y  #Y to reorient original reads, anything else does not
+
+VARIANT_LEN_COV_MIN: .8 #decimal fraction for minimal coverage length against the top variant to produce any call
+VARIANT_LEN_COV_BEST: .95 #decimal fraction for minimal coverage length against the top variant to produce an unflagged call
