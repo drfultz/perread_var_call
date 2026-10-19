@@ -27,7 +27,7 @@ def classify_and_output(output, readname, variant, score, variant_len_covered, v
 	if variant_len_covered > variant_len_cov_best:
 		output_line = f"{read_id}\t{unit}\t{start}\t{feature}:{variant}\t{score}"
 	elif variant_len_covered > variant_len_cov_min:
-		output_line = f"{read_id}\t{unit}\t{start}\t{feature}:{variant}^\t{score}"
+		output_line = f"{read_id}\t{unit}\t{start}\t{feature}:{variant}%\t{score}"
 	else:
 		output_line = f"{read_id}\t{unit}\t{start}\t{feature}:Unmapped\t{score}"
 

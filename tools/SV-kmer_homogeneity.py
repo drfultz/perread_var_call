@@ -4,7 +4,8 @@ import csv
 
 ##### Calculate how similar each feature call is to the units around it within a given window
 ##### and output (print) the scores as a vertical 'track'
-##### Homology score is number of identical feature calls for whole units within the window
+##### Homogeneity score is number of exact feature calls at the whole unit level within the window
+##### Intended for use on a variant called contig, not large read sets.
 
 
 if len(sys.argv)!=3:
@@ -22,37 +23,34 @@ if SVkmer_window % 2 == 0:
 else:
 	win_reach = (SVkmer_window-1)//2
 
-###read in the feat file
+##### Read in the feat file and set output
 with open(feat_file, 'r') as feat_obj, open(outname, 'w') as output:
-	### for each line in the .feat file
+	##### For each line in the .feat file...
 	for line in csv.reader(feat_obj, delimiter = "\t"):
-		### first data point is -1 to indicate start of Chr
-		output.write("-1\n")
-
+		### Parse units and write header for each input line
 		units = line[1].split(",")
-		if len(units) >= SVkmer_window:	
-			### print some spacer "NA"s for the units where the window can't encompass them
-			for x in range(win_reach-1): # one less bc first output data is -1
-				output.write("NA\n")
+		output.write(f"unit\thomogeneity\t{line[0]}\n")
 
-			### split the feature calls and iterate over the internal ones
-			units = line[1].split(",")
-			for i,unit in enumerate(units[win_reach:(win_reach*-1)], start=win_reach):
-				#print(unit.split("&"))
+		### Error message and skip if short line
+		if len(units) < SVkmer_window:
+			print(f"{line[0]} line is shorter than the window size", file=sys.stderr)
+			continue			
 
-				### calculate and print the homology score for each unit
+		##### loop the units of the line
+		for i, unit in enumerate(units):
+			### if unit in usable interior, calculate score
+			if win_reach <= i < len(units) - win_reach:
+				### step out in both positive and negative from center unit to match
 				hom_score = 1
 				for r in range(1,win_reach+1):
 					if unit == units[i-r]:
 						hom_score += 1
 					if unit == units[i+r]:
 						hom_score +=1
-				output.write(str(hom_score)+"\n")
 
-			### print some spacer "NA"s for the units where the window can't encompass them
-			for x in range(win_reach):
-				output.write("NA\n")
+			### else unit is at edges, report NA
+			else:
+				hom_score = "NA"
 
-		else:
-			for x in units[0:-1]: # one less bc first output data point is -1
-				output.write("NA\n")
+			### Write score
+			output.write(f"{i+1}\t{hom_score}\n")
