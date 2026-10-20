@@ -1,0 +1,9 @@
+.snakemake/
+map_to_split/
+split_sequence/
+split_mapping/
+split_calls/
+logs/
+merged_calls/
+oriented_sequence/
+qs_mapped/
