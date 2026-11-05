@@ -43,34 +43,37 @@ def write_outputs(read, hit, reorient, output_oriented, output_tagged):
 
 	##Reverse complement sequence and qualitites if set to do so and there are more R mappings
 	if reorient == "Y" and  hit["rev"] > hit["fwd"]: #if mostly R direction, reverse complement
+		comment = "RC"
 		oriented_sequence = read.sequence.translate(str.maketrans('ACGTacgtRYMKrymkVBHDvbhd', 'TGCAtgcaYRKMyrkmBVDHbvdh'))[::-1]
 		if read.quality is not None:
 			oriented_qualities = read.quality[::-1]
 		oriented_positions = [read_length - x for x in positions][::-1]
 	else:
+		comment = "F"
 		oriented_sequence = read.sequence
 		if read.quality is not None:
 			oriented_qualities = read.quality
 		oriented_positions = positions
 
 	##Write the whole original read in it's oriented state
-	x = pysam.FastxRecord()
-	x.name = read.name
-	x.sequence = oriented_sequence
-	x.quality = oriented_qualities
-	# print(x)
-	output_oriented.write(str(x) + "\n")
+	orient_read = pysam.FastxRecord()
+	orient_read.name = read.name
+	orient_read.comment = comment
+	orient_read.sequence = oriented_sequence
+	orient_read.quality = oriented_qualities
+	# print(orient_read)
+	output_oriented.write(str(orient_read) + "\n")
 
 	##Write the split reads (in the oriented direction) by looping through each pair of positions
 	count = 0
 	for begin,end in zip(oriented_positions[:-1],oriented_positions[1:]):
 		count += 1
-		a = pysam.FastxRecord()
-		a.name = f"{read.name}:{count:0{width}d}:{begin}"
-		a.sequence = oriented_sequence[begin:end]
-		a.quality = oriented_qualities[begin:end]
-		#print(a)
-		output_tagged.write(str(a) + "\n")
+		read_seg = pysam.FastxRecord()
+		read_seg.name = f"{read.name}:{count:0{width}d}:{begin}"
+		read_seg.sequence = oriented_sequence[begin:end]
+		read_seg.quality = oriented_qualities[begin:end]
+		#print(read_seg)
+		output_tagged.write(str(read_seg) + "\n")
 
 
 with open(paf_file,"r") as paf, open(output_oriented_file, "w") as output_oriented, open(output_tagged_file, "w") as output_tagged:
